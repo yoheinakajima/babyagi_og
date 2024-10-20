@@ -1,4 +1,4 @@
-from openai import OpenAI
+from litellm import completion, embedding
 import os
 import time
 import csv
@@ -8,12 +8,8 @@ from typing import Dict, List
 import math
 
 # Set API Keys and Model Names
-MODEL_COMPLETION = "gpt-4o-mini"
-MODEL_EMBEDDING = "text-embedding-ada-002"
-OPENAI_API_KEY = os.environ['OPENAI_API_KEY']
-
-# Initialize OpenAI Client
-client = OpenAI(api_key=OPENAI_API_KEY)
+MODEL_COMPLETION = os.environ.get('LITELLM_COMPLETION', "openai/gpt-4o-mini")
+MODEL_EMBEDDING = os.environ.get('LITELLM_EMBEDDING', "openai/text-embedding-ada-002")
 
 # Set Variables
 CSV_FILE = "task_data.csv"
@@ -40,11 +36,11 @@ def get_embedding(text: str) -> List[float]:
     """Generate embedding for the given text."""
     text = text.replace("\n", " ")
     try:
-        response = client.embeddings.create(
+        response = embedding(
             model=MODEL_EMBEDDING,
             input=[text]
         )
-        return response.data[0].embedding
+        return response.data[0]['embedding']
     except Exception as e:
         print(f"Error generating embedding: {e}")
         return []
@@ -91,7 +87,7 @@ def task_creation_agent(objective: str, result: Dict, task_description: str, inc
         f"Return the tasks as a JSON array."
     )
     try:
-        response = client.chat.completions.create(
+        response = completion(
             model=MODEL_COMPLETION,
             messages=[
                 {"role": "system", "content": "You are a helpful task creation assistant."},
@@ -126,7 +122,7 @@ def prioritization_agent(this_task_id: int):
         Start the task list with number {next_task_id}."""
     )
     try:
-        response = client.chat.completions.create(
+        response = completion(
             model=MODEL_COMPLETION,
             messages=[
                 {"role": "system", "content": "You are a helpful task prioritization assistant."},
@@ -152,7 +148,7 @@ def execution_agent(objective: str, task: str) -> str:
     context = context_agent(query=objective, n=5)
     prompt = f"Objective: {objective}\nTask: {task}\nResponse:"
     try:
-        response = client.chat.completions.create(
+        response = completion(
             model=MODEL_COMPLETION,
             messages=[
                 {"role": "system", "content": "You are an AI who performs one task based on the given objective."},
@@ -198,7 +194,7 @@ while True:
         enriched_result = {'data': result}  # Enrichment can be added here if needed
         result_id = f"result_{task['task_id']}"
         vector = enriched_result['data']  # Extract the actual result from the dictionary
-        embedding = get_embedding(vector)
+        result_embedding = get_embedding(vector)
 
         # Append to CSV
         try:
@@ -208,7 +204,7 @@ while True:
                     'result_id': result_id,
                     'task_name': task['task_name'],
                     'result': result,
-                    'embedding': json.dumps(embedding)
+                    'embedding': json.dumps(result_embedding)
                 })
         except Exception as e:
             print(f"Error writing to CSV: {e}")
